@@ -1,0 +1,200 @@
+package Queue::Q4Pg::Lite;
+
+use strict;
+use warnings;
+our $VERSION = '0.01';
+
+use Carp ();
+use Any::Moose;
+use DBI;
+
+has 'auto_reconnect' => (
+    is       => 'rw',
+    isa      => 'Bool',
+    required => 1,
+    default  => 1,
+);
+
+has 'connect_info' => (
+    is       => 'rw',
+    isa      => 'ArrayRef',
+    required => 1,
+);
+
+has '_dbh' => (
+    is => 'rw',
+);
+
+has '_res' => (
+    is  => 'rw',
+);
+
+has 'interval' => (
+    is      => 'rw',
+    isa     => 'Int',
+    default => 5,
+);
+
+use constant PG_ADVISORY_LOCK_SUPPORT_VERSION => 80200;
+
+no Any::Moose;
+
+sub connect {
+    my $self = shift;
+    if (! ref $self) {
+        $self = $self->new(@_);
+    }
+
+    if (my $old = $self->_dbh()) {
+        $old->disconnect();
+    }
+
+    my $dbh = $self->_connect();
+    $self->_dbh( $dbh );
+
+    my $version = $dbh->{pg_server_version};
+    if ( $version < PG_ADVISORY_LOCK_SUPPORT_VERSION ) {
+        Carp::confess( "Connected database does not support pg_advisory_lock(). required PostgreSQL version (" . PG_ADVISORY_LOCK_SUPPORT_VERSION . "). Got version " . (defined $version ? $version : '(undef)'  ) );
+    }
+    $self;
+}
+
+sub _connect {
+    my $self = shift;
+
+    return DBI->connect(@{ $self->connect_info });
+}
+
+sub dbh {
+    my $self = shift;
+    my $dbh = $self->_dbh;
+
+    if ( ! $dbh || ! $dbh->ping ) {
+        $self->auto_reconnect or die "not connect";
+        $dbh = $self->_connect();
+        $self->_dbh( $dbh );
+    }
+    return $dbh;
+}
+
+sub next {
+    my $self  = shift;
+    my $table = shift;
+    my @order = @_;
+
+    if ( my $pre = $self->_res ) {
+        Carp::carp( 'abort unackked job. id='. $pre->{id} );
+        $self->abort ; # abort previous result (not ackked)
+    }
+
+    my $dbh = $self->dbh;
+    my $sql = sprintf(
+        "SELECT * FROM %s WHERE pg_try_advisory_lock(id)",
+        $table,
+    );
+    $sql .= " ORDER BY " . join(",", @order)
+        if @order;
+    $sql .= " LIMIT 1";
+
+    my $sth = $dbh->prepare($sql);
+
+    while ( $sth->execute() ) {
+        my $res = $sth->fetchrow_hashref;
+        if ($res) {
+            $res->{_table} = $table;
+            $self->_res($res);
+            return $res;
+        }
+        sleep $self->interval;
+    }
+    return;
+}
+
+sub abort {
+    my $self = shift;
+
+    return unless $self->_res;
+
+    my $dbh  = $self->_dbh;
+    my $res  = $self->_res;
+    my $sql  = "SELECT pg_advisory_unlock(?)";
+    my $sth  = $dbh->prepare($sql);
+    $sth->execute( $res->{id} );
+    my $r = $sth->fetchrow_arrayref;
+    return $r->[0];
+}
+
+sub ack {
+    my $self = shift;
+
+    return unless $self->_res;
+
+    my $dbh  = $self->_dbh;
+    my $res  = $self->_res;
+    my $sql  = sprintf(
+        "DELETE FROM %s WHERE id=? RETURNING pg_advisory_unlock(id)",
+        $res->{_table},
+    );
+    my $sth  = $dbh->prepare($sql);
+    $sth->execute( $res->{id} );
+    my $r = $sth->fetchrow_arrayref;
+
+    $self->_res(undef);
+    return $r->[0];
+}
+
+sub insert {
+    my $self    = shift;
+    my $table   = shift;
+    my $hashref = shift;
+
+    my @cols   = keys %$hashref;
+    my @values = map { $hashref->{$_} } @cols;
+
+    my $dbh = $self->dbh;
+    my $sql = sprintf(
+        "INSERT INTO %s (%s) VALUES(%s)",
+        $table,
+        join(",", @cols),
+        join(",", map {"?"} @cols),
+    );
+    my $sth = $dbh->prepare($sql);
+    my $r   = $sth->execute(@values);
+    return $r;
+}
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->abort if $self->_res;
+}
+
+1;
+
+1;
+__END__
+
+=head1 NAME
+
+Queue::Q4Pg::Lite -
+
+=head1 SYNOPSIS
+
+  use Queue::Q4Pg::Lite;
+
+=head1 DESCRIPTION
+
+Queue::Q4Pg::Lite is
+
+=head1 AUTHOR
+
+FUJIWARA E<lt>fujiwara@topicmaker.comE<gt>
+
+=head1 SEE ALSO
+
+=head1 LICENSE
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut
