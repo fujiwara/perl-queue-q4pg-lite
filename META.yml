@@ -1,11 +1,11 @@
 ---
-abstract: ~
+abstract: 'Simple message queue using PostgreSQL'
 author:
-  - 'FUJIWARA <fujiwara@topicmaker.com>'
+  - 'FUJIWARA Shunichiro <fujiwara@cpan.org>'
 build_requires:
   Test::More: 0
 distribution_type: module
-generated_by: 'Module::Install version 0.77'
+generated_by: 'Module::Install version 0.79'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -16,7 +16,10 @@ no_index:
     - inc
     - t
 requires:
+  Any::Moose: 0
+  DBI: 0
   Filter::Util::Call: 0
+  SQL::Abstract: 0
 resources:
   license: http://dev.perl.org/licenses/
 version: 0.01

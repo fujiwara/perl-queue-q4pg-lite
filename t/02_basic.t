@@ -1,6 +1,6 @@
 use strict;
 use lib("t/lib");
-use Test::Queue::Q4Pg::Lite (tests => 65);
+use Test::Queue::Q4Pg::Lite (tests => 66);
 
 BEGIN
 {
@@ -72,6 +72,7 @@ BEGIN
     $q->disconnect;
 
     ok($q->insert($table, { v => 1 }));
+    ok($q->insert($table, { v => 2 }));
     ok($q->clear($table));
 }
 

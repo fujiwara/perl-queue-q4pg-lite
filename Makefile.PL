@@ -6,7 +6,9 @@ all_from 'lib/Queue/Q4Pg/Lite.pm';
 
 tests 't/*.t';
 author_tests 'xt';
-
+requires 'Any::Moose';
+requires 'SQL::Abstract';
+requires 'DBI';
 build_requires 'Test::More';
 use_test_base;
 auto_include;

@@ -186,7 +186,19 @@ sub disconnect {
     1;
 }
 
-sub clear { 1 }
+sub clear {
+    my $self = shift;
+    my $table = shift;
+    my ($sql, @bind) = $self->sql_maker->delete(
+        $table,
+        { "pg_try_advisory_lock(tableoid::int, id)" => \"" },
+    );
+    $sql .= " RETURNING pg_advisory_unlock(tableoid::int, id)";
+    my $sth  = $self->dbh->prepare($sql);
+    my $rows = $sth->execute();
+    $sth->finish();
+    return $rows;
+}
 
 sub DESTROY {
     my $self = shift;
@@ -280,6 +292,10 @@ a table name. The second argument is a hashref that specifies the mapping
 between column names and their respective values.
 
   $q->insert($table, { col1 => $val1, col2 => $val2, col3 => $val3 });
+
+=head2 clear($table);
+
+Deletes everything the specified queue.
 
 =head2 dbh
 
