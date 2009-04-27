@@ -2,7 +2,7 @@ package Queue::Q4Pg::Lite;
 
 use strict;
 use warnings;
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use Carp ();
 use Any::Moose;
@@ -95,17 +95,18 @@ sub next {
         $self->abort;
     }
     my $dbh = $self->dbh;
-
-    $where ||= {};
-    $where->{"pg_try_advisory_lock(tableoid::int, id)"} = \"";
-
-    my ($sql, @bind) = $self->sql_maker->select(
-        $table,
-        "",
-        $where,
-        $order,
-    );
+    my $sql = "SELECT * FROM $table";
+    my ($sql_where, @bind) = $self->sql_maker->where($where);
+    if ( $sql_where eq '' ) {
+        $sql .= " WHERE pg_try_advisory_lock(tableoid::int, id)";
+    }
+    else {
+        (my $cond = $sql_where) =~ s/^\s+WHERE\s//i;
+        $sql .= " WHERE CASE WHEN $cond THEN pg_try_advisory_lock(tableoid::int, id) ELSE false END";
+    }
+    $sql .= $self->sql_maker->where(undef, $order) if defined $order;
     $sql .= " LIMIT 1";
+
     my $sth = $dbh->prepare($sql);
 
     while ( $sth->execute(@bind) ) {
