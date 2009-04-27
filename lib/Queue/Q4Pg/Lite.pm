@@ -2,7 +2,7 @@ package Queue::Q4Pg::Lite;
 
 use strict;
 use warnings;
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use Carp ();
 use Any::Moose;
@@ -88,7 +88,7 @@ sub dbh {
 sub next {
     my $self  = shift;
     my $table = shift;
-    my ( $where, $order ) = @_;
+    my ( $where ) = @_;
 
     if ( my $pre = $self->_res ) {
         Carp::carp( 'abort not finished job. id='. $pre->{id} );
@@ -104,7 +104,6 @@ sub next {
         (my $cond = $sql_where) =~ s/^\s+WHERE\s//i;
         $sql .= " WHERE CASE WHEN $cond THEN pg_try_advisory_lock(tableoid::int, id) ELSE false END";
     }
-    $sql .= $self->sql_maker->where(undef, $order) if defined $order;
     $sql .= " LIMIT 1";
 
     my $sth = $dbh->prepare($sql);
@@ -265,14 +264,14 @@ Connects to the target database.
     ]
   );
 
-=head2 next($table, [$where, $order]);
+=head2 next($table, [$where]);
 
 Blocks until the next item is available.
 
-$where and $order are same of arguments for L<SQL::Abstract>->select($table, $col, $where, $order)
+$where is same of arguments for L<SQL::Abstract>->select($table, $col, $where)
 
-  # SELECT * FROM mq WHERE priority < 10 ORDER BY priority, created_on;
-  $q->next("mq", { priority => { "<", 10 } }, [ "priority", "created_on" ]);
+  # SELECT * FROM mq WHERE priority < 10;
+  $q->next("mq", { priority => { "<", 10 } });
 
 =head2 fetch_hashref
 
