@@ -10,6 +10,8 @@ requires 'Any::Moose';
 requires 'SQL::Abstract';
 requires 'DBI';
 build_requires 'Test::More';
+repository 'http://github.com/fujiwara/perl-queue-q4pg-lite/tree/master';
+
 use_test_base;
 auto_include;
 WriteAll;
